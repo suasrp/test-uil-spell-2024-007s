@@ -1,17 +1,26 @@
 import streamlit as st
-from gtts import gTTS
-from playsound import playsound
-from nltk.corpus import wordnet
-import nltk
-import random
+import requests
+from navigation import make_sidebar, check_user_inactivity  # Import necessary functions
 
-# Download required NLTK data if not already present
-nltk.download('wordnet')
+# Check for inactivity and logout if necessary
+check_user_inactivity()
+
+# Add sidebar
+make_sidebar()
 
 # Updated list of words
 words = [
-    "abbreviate", "abnormality", "abode", "abrasion", "abundantly", "academic",
-    "xylophone", "yacht", "yearling", "zealous", "zestfully"
+    "anklebone", "blamable", "botulism", "braggart", "braille", "buffered",
+    "cataract", "damask", "emanate", "existence", "fiercely", "flagrant", 
+    "flounce", "food chain", "footbridge", "fragrance", "graffiti", "griminess", 
+    "haggard", "hindrance", "hygienic", "intermittent", "jamboree", "Kleenex", 
+    "lamentation", "light-year", "liquefy", "malefactor", "manageable", 
+    "meditative", "misspend", "motley", "necessitate", "notoriety", "nougat", 
+    "novitiate", "nurturant", "nuthatch", "nutlet", "nutriment", "odometer", 
+    "Offertory", "penitence", "quick bread", "racketeer", "raspy", "rationale", 
+    "russet", "scarcely", "scourge", "spectacle", "syllabicate", "taffeta", 
+    "tincture", "tousle", "toxemia", "typify", "ultima", "unaligned", "unlined", 
+    "vegetative", "Venus", "wallaby", "web-footed", "xylophone", "yacht", "zealous"
 ]
 
 # Create 26 tests (A-Z)
@@ -24,102 +33,107 @@ def create_tests(words_list):
 
 tests = create_tests(words)
 
-# Streamlit app class
-class SpellingApp:
-    def __init__(self):
-        # Default background and text color
-        self.bg_color = '#ffffff'  # Default background color
-        self.text_color = '#000000'  # Default text color
-        self.score = 0
-        self.results = []
-        self.incorrect_words = set()
-        self.words_to_test = None
-        self.current_word = None
-        self.test_in_progress = False
-        self.current_index = 0
-        
-        self.start_screen()
+# Streamlit application
+st.title("👍 5th-6th Grade - Spelling Game")
 
-    def start_screen(self):
-        st.markdown(f"<h1 style='color: {self.text_color}; background-color: {self.bg_color}; text-align:center;'>Spelling Test</h1>", unsafe_allow_html=True)
-        
-        if self.test_in_progress:
-            st.write(f"Test in Progress: {self.current_word}")
-        
-        st.button("Start Test", on_click=self.select_test)
-        st.button("View Words", on_click=self.view_words)
-        st.button("Settings", on_click=self.settings)
+def pronounce(word):
+    # Embed the ResponsiveVoice script into Streamlit using components
+    st.components.v1.html(f"""
+    <script src="https://code.responsivevoice.org/responsivevoice.js?key=Ytp4Wvua"></script>
+    <script>
+        responsiveVoice.speak("{word}", "UK English Male");
+    </script>
+    """, height=0)  # Set height=0 to hide the script output
 
-        if self.incorrect_words:
-            st.button("Review Incorrect Words", on_click=self.review_incorrect_words)
+# Select test
+letter = st.sidebar.selectbox("Select a letter:", list(tests.keys()))
+words_to_test = tests[letter]
 
-    def select_test(self):
-        self.test_in_progress = True
-        letter = st.selectbox("Select a Letter", list(tests.keys()))
-        self.words_to_test = tests[letter]
-        self.current_word = self.words_to_test[0]
-        self.show_test_interface()
+# Initialize session state for tracking the current word index
+if 'current_word_index' not in st.session_state:
+    st.session_state.current_word_index = 0
+    st.session_state.score = 0
 
-    def show_test_interface(self):
-        st.markdown(f"<h2 style='color: {self.text_color}; background-color: {self.bg_color}; text-align:center;'>Spell the Word</h2>", unsafe_allow_html=True)
-        st.write(f"Word: {self.current_word}")
+# Get the current word based on the index
+current_word_index = st.session_state.current_word_index
 
-        # Input field for the user to enter the spelling
-        user_input = st.text_input("Spell the word:", "")
-        
-        # Button to check the user's input
-        if st.button("Submit"):
-            self.check_spelling(user_input)
+# Show the current word
+if current_word_index < len(words_to_test):
+    current_word = words_to_test[current_word_index]
 
-    def check_spelling(self, user_input):
-        if user_input.lower() == self.current_word.lower():
-            self.score += 1
-            st.success(f"Correct! Your score is: {self.score}")
+    st.subheader("Spell the word:")
+    st.write("(The word will be pronounced now)")
+    st.write("(*Users are logged out after 15 minutes of inactivity!)")
+
+    # Show pronunciation button
+    if st.button("Pronounce Word", key="pronounce"):
+        pronounce(current_word)
+    
+    # Inject JavaScript to focus the input field automatically
+    st.components.v1.html("""
+    <script>
+        window.onload = function() {
+            const inputField = document.querySelector('input[data-baseweb="input"]');
+            if (inputField) {
+                inputField.focus();  // Automatically focus the input field when the page loads
+            }
+        };
+    </script>
+    """, height=0)
+
+    # Input field for user's answer
+    user_input = st.text_input(
+        "Your answer (hidden word):",
+        key=f"input_{current_word_index}",  # Unique key to force resetting input field
+    )
+
+    # Handle button display logic
+    submit_button = st.button("Submit", key="submit")
+    next_word_button = st.button("Next Word", key="next_word")
+    
+    # CSS for custom button styles
+    st.markdown("""
+    <style>
+        .stButton>button {
+            background-color: green;
+            color: white;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        .stTextInput input {
+            font-size: 18px;
+        }
+        .score-text {
+            color: blue;
+            font-weight: bold;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Handle the logic when the submit button is clicked
+    if submit_button:
+        # Pronounce the next word right after the user submits
+        if user_input.strip().lower() == current_word:
+            st.success("Correct!")
+            st.session_state.score += 1
         else:
-            self.incorrect_words.add(self.current_word)
-            st.error(f"Incorrect. The correct spelling is: {self.current_word}")
+            st.error(f"Incorrect! The correct spelling is: {current_word}")
         
-        self.next_word()
+        # Hide the Pronounce and Submit buttons, show Next Word button
+        submit_button = None
+        st.session_state.current_word_index += 1
 
-    def next_word(self):
-        self.current_index += 1
-        if self.current_index < len(self.words_to_test):
-            self.current_word = self.words_to_test[self.current_index]
-            self.show_test_interface()
-        else:
-            self.test_in_progress = False
-            st.write(f"Test completed! Your final score is: {self.score}")
-            st.button("Start New Test", on_click=self.start_screen)
+    # Display the current score (correct answers / total_words)
+    st.markdown(f"**Your current score: {st.session_state.score} / {current_word_index + 1}**", unsafe_allow_html=True)
 
-    def view_words(self):
-        st.markdown(f"<h2 style='color: {self.text_color}; background-color: {self.bg_color}; text-align:center;'>List of Words</h2>", unsafe_allow_html=True)
-        
-        for letter, words_list in tests.items():
-            st.write(f"**Words starting with '{letter.upper()}':**")
-            st.write(", ".join(words_list))
-        
-        st.button("Back to Main Menu", on_click=self.start_screen)
-
-    def settings(self):
-        st.markdown(f"<h2 style='color: {self.text_color}; background-color: {self.bg_color}; text-align:center;'>Settings</h2>", unsafe_allow_html=True)
-        
-        # Color pickers for background and text colors
-        self.bg_color = st.color_picker("Pick a Background Color", self.bg_color)
-        self.text_color = st.color_picker("Pick a Text Color", self.text_color)
-        
-        st.button("Back to Main Menu", on_click=self.start_screen)
-
-    def review_incorrect_words(self):
-        st.markdown(f"<h2 style='color: {self.text_color}; background-color: {self.bg_color}; text-align:center;'>Review Incorrect Words</h2>", unsafe_allow_html=True)
-        
-        if self.incorrect_words:
-            st.write("The following words were spelled incorrectly:")
-            for word in self.incorrect_words:
-                st.write(word)
-        else:
-            st.write("You have not made any mistakes yet.")
-        
-        st.button("Back to Main Menu", on_click=self.start_screen)
-
-# Initialize the app
-app = SpellingApp()
+    # If at the end, reset or display the final score
+    if st.session_state.current_word_index >= len(words_to_test):
+        st.markdown(f"**Your final score is: {st.session_state.score} / {len(words_to_test)}**", unsafe_allow_html=True)
+        if st.button("Restart"):
+            st.session_state.current_word_index = 0
+            st.session_state.score = 0
+else:
+    st.markdown(f"**Your final score is: {st.session_state.score} / {len(words_to_test)}**", unsafe_allow_html=True)
+    if st.button("Restart"):
+        st.session_state.current_word_index = 0
+        st.session_state.score = 0
